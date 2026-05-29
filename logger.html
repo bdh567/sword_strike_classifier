@@ -84,6 +84,24 @@
                     malformedCount++;
                     continue;
                 }
+
+                const columns = row.split(',');
+
+                // 1. Structural check: Must have exactly 7 elements
+                if (columns.length !== 7) {
+                    malformedCount++;
+                    continue;
+                }
+                
+                // 2. Data Integrity check: Skip row if any individual column is empty or just whitespace
+                // .some() checks if at least one column matches the condition (trimmed length is 0)
+                const hasEmptyColumn = columns.some(col => col.trim() === "");
+                if (hasEmptyColumn) {
+                    malformedCount++; // Count it as malformed/incomplete data
+                    continue;         // Skip to the next row immediately
+                }
+
+
                 csvRows.push(row);
                 rowCount++;
             }
