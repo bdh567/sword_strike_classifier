@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TinyML Sword Tracker</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            text-align: center;
+            background: #121212;
+            color: #ffffff;
+            padding: 50px;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            background-color: #00adb5;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        button:hover { background-color: #007a80; }
+        #result-box {
+            margin-top: 40px;
+            padding: 30px;
+            background-color: #1e1e1e;
+            border-radius: 10px;
+            border: 2px solid #333;
+        }
+        #strike-output {
+            font-size: 48px;
+            color: #393e46;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .active-strike { color: #00adb5 !important; animation: pop 0.3s ease-out; }
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Sword Move Transcript Decoder</h1>
+    <p>Click below to connect to your Arduino Nano 33 BLE via wireless Bluetooth.</p>
+    
+    <button id="connect-btn">Connect Sword Microcontroller</button>
+
+    <div id="result-box">
+        <h3>Detected Classifier Output:</h3>
+        <div id="strike-output">Awaiting Connection...</div>
+    </div>
+
+    <script>
+        // 1. THESE STRINGS MUST MATCH YOUR ARDUINO SKETCH BLE CONFIGURATION
+        const SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214"; 
+        const CHARACTERISTIC_UUID = "19b10001-e8f2-537e-4f6c-d104768a1214";
+
+        const connectBtn = document.getElementById('connect-btn');
+        const strikeOutput = document.getElementById('strike-output');
+
+        connectBtn.addEventListener('click', async () => {
+            try {
+                strikeOutput.innerText = "Scanning...";
+                
+                // 2. Request the browser to scan for devices hosting your specific Service UUID
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ services: [SERVICE_UUID] }]
+                });
+
+                strikeOutput.innerText = "Connecting to device...";
+                const server = await device.gatt.connect();
+
+                strikeOutput.innerText = "Initializing streams...";
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+                // 3. Subscribe to notifications so the web app reacts instantly when the Arduino predicts a strike
+                await characteristic.startNotifications();
+                characteristic.addEventListener('characteristicvaluechanged', handleIncomingData);
+
+                strikeOutput.innerText = "Ready! Swing your blade.";
+                strikeOutput.style.color = "#aaaaaa";
+                connectBtn.innerText = "Connected";
+                connectBtn.disabled = true;
+
+            } catch (error) {
+                console.error("Bluetooth Connection Failed:", error);
+                strikeOutput.innerText = "Error: " + error.message;
+                strikeOutput.style.color = "#ff2e63";
+            }
+        });
+
+        // 4. Handle incoming byte frames from the Arduino
+        function handleIncomingData(event) {
+            const valueBuffer = event.target.value;
+            
+            // Decodes the raw bytes as an ASCII text string (e.g., "Vertical", "Horizontal", "Null")
+            const decoder = new TextDecoder('utf-8');
+            const predictedStrike = decoder.decode(valueBuffer).trim();
+
+            // Update the HTML dashboard display
+            if (predictedStrike !== "Null" && predictedStrike !== "") {
+                strikeOutput.innerText = predictedStrike;
+                strikeOutput.classList.add('active-strike');
+                
+                // Clear the visual scaling pop effect after animation plays
+                setTimeout(() => strikeOutput.classList.remove('active-strike'), 300);
+            } else {
+                strikeOutput.innerText = "Neutral Guard / Idle";
+                strikeOutput.style.color = "#666666";
+            }
+        }
+    </script>
+</body>
+</html>
