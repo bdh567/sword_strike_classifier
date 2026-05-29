@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TinyML Sword Realtime Telemetry Terminal</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; text-align: center; background: #121212; color: #fff; padding: 20px; }
+        button { padding: 15px 35px; font-size: 18px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; transition: 0.3s; background-color: #00adb5; color: white; }
+        button:hover { background-color: #007a80; }
+        button:disabled { background-color: #222; color: #555; cursor: not-allowed; }
+        #dashboard { margin-top: 20px; padding: 25px; background-color: #1e1e1e; border-radius: 12px; border: 2px solid #333; max-width: 700px; margin-left: auto; margin-right: auto; }
+        #strike-display { font-size: 52px; color: #444; font-weight: bold; margin: 15px 0; text-transform: uppercase; }
+        .vertical-detect { color: #00adb5 !important; animation: pop 0.4s ease-out; }
+        .horizontal-detect { color: #ff2e63 !important; animation: pop 0.4s ease-out; }
+        @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        
+        /* Grid layout for displaying parsed telemetry numbers */
+        .telemetry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; text-align: left; }
+        .data-card { background: #151515; padding: 12px; border-radius: 6px; border: 1px solid #2a2a2a; font-family: monospace; }
+        .card-title { color: #888; font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
+        .card-value { color: #fff; font-size: 15px; }
+        
+        .log-container { text-align: left; background: #0b0b0b; padding: 12px; border-radius: 6px; height: 140px; overflow-y: auto; font-family: monospace; font-size: 12px; border: 1px solid #222; margin-top: 5px; }
+        #serial-mirror { color: #00ff66; }
+        #bout-transcript { color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <h1>TinyML Sword Bluetooth Analytics Terminal</h1>
+    <button id="connect-btn">Connect Tracking Blade</button>
+
+    <div id="dashboard">
+        <div id="strike-display">System Idle</div>
+        
+        <div class="telemetry-grid">
+            <div class="data-card">
+                <div class="card-title">Accelerometer (G's)</div>
+                <div id="accel-val" class="card-value">X: 0.00 | Y: 0.00 | Z: 0.00</div>
+            </div>
+            <div class="data-card">
+                <div class="card-title">Gyroscope (Rotational Speed)</div>
+                <div id="gyro-val" class="card-value">X: 0 | Y: 0 | Z: 0</div>
+            </div>
+            <div class="data-card" style="grid-column: span 2;">
+                <div class="card-title">Live Model Probability Distribution</div>
+                <div id="model-val" class="card-value">Vertical: 0% | Horizontal: 0%</div>
+            </div>
+        </div>
+
+        <h4 style="text-align:left; margin-bottom:5px; color:#00ff66;">Wireless Telemetry Logger:</h4>
+        <div id="serial-mirror" class="log-container">Awaiting link initialization...</div>
+
+        <h4 style="text-align:left; margin-bottom:5px; margin-top:15px;">Match History Transcript:</h4>
+        <div id="bout-transcript" class="log-container"></div>
+    </div>
+
+    <script>
+        const SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
+        const PREDICTION_UUID = "19b10001-e8f2-537e-4f6c-d104768a1214";
+        const TELEMETRY_UUID = "19b10002-e8f2-537e-4f6c-d104768a1214"; // New characterisitc listener
+
+        const connectBtn = document.getElementById('connect-btn');
+        const strikeDisplay = document.getElementById('strike-display');
+        const transcriptLog = document.getElementById('bout-transcript');
+        const serialMirror = document.getElementById('serial-mirror');
+        
+        // Element bindings for raw values
+        const accelVal = document.getElementById('accel-val');
+        const gyroVal = document.getElementById('gyro-val');
+        const modelVal = document.getElementById('model-val');
+
+        let lastPrediction = "idle";
+        let resetVisualsTimeout = null;
+
+        connectBtn.addEventListener('click', async () => {
+            if (!navigator.bluetooth) { alert("Web BLE not supported!"); return; }
+            try {
+                strikeDisplay.innerText = "Connecting...";
+                const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE_UUID] }] });
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                
+                // Bind characteristic 1 (Labels)
+                const predChar = await service.getCharacteristic(PREDICTION_UUID);
+                await predChar.startNotifications();
+                predChar.addEventListener('characteristicvaluechanged', handlePrediction);
+
+                // Bind characteristic 2 (Telemetry strings)
+                const telemChar = await service.getCharacteristic(TELEMETRY_UUID);
+                await telemChar.startNotifications();
+                telemChar.addEventListener('characteristicvaluechanged', handleTelemetry);
+
+                strikeDisplay.innerText = "Armed";
+                serialMirror.innerHTML = "<b>[CONNECTED] Telemetry stream listening.</b><br>";
+                connectBtn.innerText = "System Linked";
+                connectBtn.disabled = true;
+            } catch (e) {
+                strikeDisplay.innerText = "Error";
+                console.error(e);
+            }
+        });
+
+        // Handler for structural telemetry tracking
+        function handleTelemetry(event) {
+            const decoder = new TextDecoder('utf-8');
+            const packet = decoder.decode(event.target.value).trim();
+            const timestamp = new Date().toLocaleTimeString([], { hour12: false });
+            
+            // Append line directly to our console log window box mimic
+            serialMirror.innerHTML += `[${timestamp}] BLE RX: ${packet}<br>`;
+            serialMirror.scrollTop = serialMirror.scrollHeight;
+
+            // Split and parse our custom packed string data payload structure
+            // Format: IMU|ax,ay,az|gx,gy,gz|V:val,H:val
+            const sections = packet.split('|');
+            if (sections[0] === "IMU" && sections.length === 4) {
+                const accelData = sections[1].split(',');
+                const gyroData = sections[2].split(',');
+                const modelData = sections[3].split(',');
+
+                // Push clean strings directly into our digital card displays
+                accelVal.innerText = `X: ${accelData[0]}G | Y: ${accelData[1]}G | Z: ${accelData[2]}G`;
+                gyroVal.innerText  = `X: ${gyroData[0]}°/s | Y: ${gyroData[1]}°/s | Z: ${gyroData[2]}°/s`;
+                
+                // Pull out the probability values from labels (V:0.12, H:0.88)
+                const vConf = Math.round(parseFloat(modelData[0].split(':')[1]) * 100);
+                const hConf = Math.round(parseFloat(modelData[1].split(':')[1]) * 100);
+                modelVal.innerText = `Vertical Confidence: ${vConf}% | Horizontal Confidence: ${hConf}%`;
+            }
+        }
+
+        // Handler for striking events
+        function handlePrediction(event) {
+            const decoder = new TextDecoder('utf-8');
+            const currentPrediction = decoder.decode(event.target.value).trim().toLowerCase();
+
+            if (currentPrediction === "idle") return;
+
+            if (currentPrediction === "vertical" || currentPrediction === "horizontal") {
+                if (currentPrediction !== lastPrediction) {
+                    if (resetVisualsTimeout) clearTimeout(resetVisualsTimeout);
+
+                    strikeDisplay.innerText = currentPrediction + " cut!";
+                    strikeDisplay.className = (currentPrediction === "vertical") ? "vertical-detect" : "horizontal-detect";
+
+                    const timeStr = new Date().toLocaleTimeString([], { hour12: false });
+                    const indicatorColor = (currentPrediction === "vertical") ? "#00adb5" : "#ff2e63";
+                    
+                    transcriptLog.innerHTML += `[${timeStr}] -> <span style="color:${indicatorColor}; font-weight:bold;">${currentPrediction.toUpperCase()}</span> strike recorded.<br>`;
+                    transcriptLog.scrollTop = transcriptLog.scrollHeight; 
+
+                    lastPrediction = currentPrediction;
+
+                    resetVisualsTimeout = setTimeout(() => {
+                        strikeDisplay.className = "";
+                        strikeDisplay.innerText = "Armed";
+                        strikeDisplay.style.color = "#888";
+                        lastPrediction = "idle"; 
+                    }, 1500);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
