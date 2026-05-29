@@ -100,6 +100,12 @@
                     malformedCount++; // Count it as malformed/incomplete data
                     continue;         // Skip to the next row immediately
                 }
+                const hasInvalidNumber = columns.some(col => isNaN(Number(col.trim())));
+                if (hasInvalidNumber) {
+                    malformedCount++; // Log the hyphen/text glitch as malformed
+                    continue;         // Skip this row completely
+                }
+
 
 
                 csvRows.push(row);
