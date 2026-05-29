@@ -28,8 +28,10 @@
         const CHARACTERISTIC_UUID = "19b10001-e8f2-537e-4f6c-d104768a1214";
 
         let csvRows = ["timestamp,accelX,accelY,accelZ,gyroX,gyroY,gyroZ"];
-        let startTime = 0;
         let rowCount = 0;
+        let malformedCount = 0;
+        let bleDevice = null;
+        let bleCharacteristic = null;
 
         const startBtn = document.getElementById('start-btn');
         const stopBtn = document.getElementById('stop-btn');
@@ -44,14 +46,17 @@
                 });
 
                 statusDiv.innerText = "Connecting Bluetooth Link...";
+                bleDevice = device;
+                device.addEventListener('gattserverdisconnected', handleDisconnect);
                 const server = await device.gatt.connect();
                 const service = await server.getPrimaryService(SERVICE_UUID);
                 const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+                bleCharacteristic = characteristic;
 
                 // Reset storage parameters
                 csvRows = ["timestamp,accelX,accelY,accelZ,gyroX,gyroY,gyroZ"];
                 rowCount = 0;
-                startTime = Date.now();
+                malformedCount = 0;
 
                 await characteristic.startNotifications();
                 characteristic.addEventListener('characteristicvaluechanged', handleIncomingStream);
@@ -67,23 +72,43 @@
 
         function handleIncomingStream(event) {
             const decoder = new TextDecoder('utf-8');
-            const dataString = decoder.decode(event.target.value).trim();
-            
-            // Calculate a running relative timestamp in milliseconds
-            const relativeTimestamp = Date.now() - startTime;
+            const payload = decoder.decode(event.target.value);
 
-            // Combine timestamp with IMU strings and append
-            const completedRow = `${relativeTimestamp},${dataString}`;
-            csvRows.push(completedRow);
-
-            rowCount++;
+            // Each notification carries a batch of rows joined by ';'.
+            // Every row already includes its Arduino-side timestamp: t,ax,ay,az,gx,gy,gz
+            const rows = payload.split(';');
+            for (const raw of rows) {
+                const row = raw.trim();
+                if (!row) continue; // skip empty (e.g. trailing separator)
+                if (row.split(',').length !== 7) {
+                    malformedCount++;
+                    continue;
+                }
+                csvRows.push(row);
+                rowCount++;
+            }
             counterSpan.innerText = rowCount;
         }
 
+        function handleDisconnect() {
+            statusDiv.innerText = "Device disconnected! Recording stopped — download or reconnect.";
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+
         stopBtn.addEventListener('click', () => {
-            statusDiv.innerText = "Compiling Data Flatbuffer...";
-            
-            // Disconnect and generate the downloadable CSV asset text blob
+            statusDiv.innerText = "Generating CSV...";
+
+            // Stop the stream and disconnect so a re-connect starts cleanly.
+            if (bleCharacteristic) {
+                bleCharacteristic.removeEventListener('characteristicvaluechanged', handleIncomingStream);
+            }
+            if (bleDevice) {
+                bleDevice.removeEventListener('gattserverdisconnected', handleDisconnect);
+                if (bleDevice.gatt.connected) bleDevice.gatt.disconnect();
+            }
+
+            // Generate the downloadable CSV asset text blob
             const csvContent = csvRows.join("\n");
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             
@@ -98,7 +123,7 @@
             link.click();
             document.body.removeChild(link);
 
-            statusDiv.innerText = "CSV Downloaded! Refresh page to record a new class.";
+            statusDiv.innerText = `CSV Downloaded (${rowCount} rows, ${malformedCount} dropped)! Refresh to record a new class.`;
             startBtn.disabled = false;
             stopBtn.disabled = true;
         });
