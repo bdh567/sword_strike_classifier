@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Wireless Sword Data Collection Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; text-align: center; background: #121212; color: #fff; padding: 40px; }
+        button { padding: 15px 30px; font-size: 16px; margin: 10px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; }
+        .connect-btn { background-color: #00adb5; color: white; }
+        .stop-btn { background-color: #ff2e63; color: white; }
+        #status { font-size: 24px; color: #888; margin: 20px; }
+        #counter { font-size: 48px; color: #00adb5; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>Wireless Sword Data Collection</h1>
+    <p>Perform a continuous chain of identical strikes, then download the dataset.</p>
+
+    <button class="connect-btn" id="start-btn">Connect & Start Recording</button>
+    <button class="stop-btn" id="stop-btn" disabled>Stop & Download CSV</button>
+
+    <div id="status">Status: Disconnected</div>
+    <div>Rows Captured: <span id="counter">0</span></div>
+
+    <script>
+        const SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
+        const CHARACTERISTIC_UUID = "19b10001-e8f2-537e-4f6c-d104768a1214";
+
+        let csvRows = ["timestamp,accelX,accelY,accelZ,gyroX,gyroY,gyroZ"];
+        let startTime = 0;
+        let rowCount = 0;
+
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const statusDiv = document.getElementById('status');
+        const counterSpan = document.getElementById('counter');
+
+        startBtn.addEventListener('click', async () => {
+            try {
+                statusDiv.innerText = "Scanning for Sword Microcontroller...";
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ services: [SERVICE_UUID] }]
+                });
+
+                statusDiv.innerText = "Connecting Bluetooth Link...";
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+                // Reset storage parameters
+                csvRows = ["timestamp,accelX,accelY,accelZ,gyroX,gyroY,gyroZ"];
+                rowCount = 0;
+                startTime = Date.now();
+
+                await characteristic.startNotifications();
+                characteristic.addEventListener('characteristicvaluechanged', handleIncomingStream);
+
+                statusDiv.innerText = "RECORDING ACTIVE! Swing your blade...";
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+
+            } catch (error) {
+                statusDiv.innerText = "Connection Failed: " + error.message;
+            }
+        });
+
+        function handleIncomingStream(event) {
+            const decoder = new TextDecoder('utf-8');
+            const dataString = decoder.decode(event.target.value).trim();
+            
+            // Calculate a running relative timestamp in milliseconds
+            const relativeTimestamp = Date.now() - startTime;
+
+            // Combine timestamp with IMU strings and append
+            const completedRow = `${relativeTimestamp},${dataString}`;
+            csvRows.push(completedRow);
+
+            rowCount++;
+            counterSpan.innerText = rowCount;
+        }
+
+        stopBtn.addEventListener('click', () => {
+            statusDiv.innerText = "Compiling Data Flatbuffer...";
+            
+            // Disconnect and generate the downloadable CSV asset text blob
+            const csvContent = csvRows.join("\n");
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            
+            link.setAttribute("href", url);
+            link.setAttribute("download", "sword_continuous_chain.csv");
+            link.style.visibility = 'hidden';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            statusDiv.innerText = "CSV Downloaded! Refresh page to record a new class.";
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        });
+    </script>
+</body>
+</html>
