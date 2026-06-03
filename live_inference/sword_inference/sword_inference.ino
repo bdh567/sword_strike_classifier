@@ -49,18 +49,9 @@ typedef struct{
 float ei_get_sign(float number);
 
 bool init_IMU(void);
-bool init_HTS(void);
-bool init_BARO(void);
-bool init_APDS(void);
 
 uint8_t poll_acc(void);
 uint8_t poll_gyr(void);
-uint8_t poll_mag(void);
-uint8_t poll_HTS(void);
-uint8_t poll_BARO(void);
-uint8_t poll_APDS_color(void);
-uint8_t poll_APDS_proximity(void);
-uint8_t poll_APDS_gesture(void);
 
 /* Private variables ------------------------------------------------------- */
 static const bool debug_nn = false; // Set this to true to see e.g. features generated from the raw signal
@@ -271,30 +262,6 @@ bool init_IMU(void) {
   return init_status;
 }
 
-bool init_HTS(void) {
-  static bool init_status = false;
-  if (!init_status) {
-    init_status = HS300x.begin();
-  }
-  return init_status;
-}
-
-bool init_BARO(void) {
-  static bool init_status = false;
-  if (!init_status) {
-    init_status = BARO.begin();
-  }
-  return init_status;
-}
-
-bool init_APDS(void) {
-  static bool init_status = false;
-  if (!init_status) {
-    init_status = APDS.begin();
-  }
-  return init_status;
-}
-
 uint8_t poll_acc(void) {
   
     if (IMU.accelerationAvailable()) {
@@ -319,55 +286,6 @@ uint8_t poll_gyr(void) {
   
     if (IMU.gyroscopeAvailable()) {
         IMU.readGyroscope(data[3], data[4], data[5]);
-    }
-    return 0;
-}
-
-uint8_t poll_mag(void) {
-  
-    if (IMU.magneticFieldAvailable()) {
-        IMU.readMagneticField(data[6], data[7], data[8]);
-    }
-    return 0;
-}
-
-uint8_t poll_HTS(void) {
-  
-    data[9] = HS300x.readTemperature();
-    data[10] = HS300x.readHumidity();
-    return 0;
-}
-
-uint8_t poll_BARO(void) {
-  
-    data[11] = BARO.readPressure(); // (PSI/MILLIBAR/KILOPASCAL) default kPa
-    return 0;
-}
-
-uint8_t poll_APDS_color(void) {
-  
-    int temp_data[4];
-    if (APDS.colorAvailable()) {
-        APDS.readColor(temp_data[0], temp_data[1], temp_data[2], temp_data[3]);
-
-        data[12] = temp_data[0];
-        data[13] = temp_data[1];
-        data[14] = temp_data[2];
-        data[15] = temp_data[3];
-    }
-}
-
-uint8_t poll_APDS_proximity(void) {
-
-    if (APDS.proximityAvailable()) {
-        data[16] = (float)APDS.readProximity();
-    }
-    return 0;
-}
-
-uint8_t poll_APDS_gesture(void) {
-    if (APDS.gestureAvailable()) {
-        data[17] = (float)APDS.readGesture();
     }
     return 0;
 }

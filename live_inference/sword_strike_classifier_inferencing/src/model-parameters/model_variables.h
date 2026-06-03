@@ -46,7 +46,7 @@
 #include "edge-impulse-sdk/classifier/inferencing_engines/engines.h"
 #include "edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_common.h"
 
-const char* ei_classifier_inferencing_categories_1014843_1[] = { "horizontal", "vertical" };
+const char* ei_classifier_inferencing_categories_1014843_1[] = { "diagonal", "horizontal", "idle", "vertical" };
 
 EI_CLASSIFIER_DSP_AXES_INDEX_TYPE ei_dsp_config_1014843_8_axes[] = { 0, 1, 2, 3, 4, 5 };
 const uint32_t ei_dsp_config_1014843_8_axes_size = 6;
@@ -56,11 +56,11 @@ ei_dsp_config_spectral_analysis_t ei_dsp_config_1014843_8 = {
     6, // int length of axes
     0.00118063754427f, // float scale-axes
     1, // int input-decimation-ratio
-    "low", // select filter-type
-    3.28125f, // float filter-cutoff
+    "none", // select filter-type
+    0.0f, // float filter-cutoff
     6, // int filter-order
     "FFT", // select analysis-type
-    64, // int fft-length
+    32, // int fft-length
     3, // int spectral-peaks-count
     0.1f, // float spectral-peaks-threshold
     "0.1, 0.5, 1.0, 2.0, 5.0", // string spectral-power-edges
@@ -75,7 +75,7 @@ const uint8_t ei_dsp_blocks_1014843_1_size = 1;
 ei_model_dsp_t ei_dsp_blocks_1014843_1[ei_dsp_blocks_1014843_1_size] = {
     { // DSP block 8
         8,
-        60, // output size
+        126, // output size
         &extract_spectral_analysis_features, // DSP function pointer
         (void*)&ei_dsp_config_1014843_8, // pointer to config struct
         ei_dsp_config_1014843_8_axes, // array of offsets into the input stream, one for each axis
@@ -150,9 +150,9 @@ const ei_impulse_t impulse_1014843_1 = {
     .project_name = "sword strike classifier",
     .impulse_id = 1,
     .impulse_name = "Impulse #1",
-    .deploy_version = 2,
+    .deploy_version = 6,
 
-    .nn_input_frame_size = 60,
+    .nn_input_frame_size = 126,
     .raw_sample_count = 40,
     .raw_samples_per_frame = 6,
     .dsp_input_frame_size = 40 * 6,
@@ -181,7 +181,7 @@ const ei_impulse_t impulse_1014843_1 = {
     .slices_per_model_window = 4,
 
     .has_anomaly = EI_ANOMALY_TYPE_UNKNOWN,
-    .label_count = 2,
+    .label_count = 4,
     .categories = ei_classifier_inferencing_categories_1014843_1,
     .results_type = EI_CLASSIFIER_TYPE_CLASSIFICATION,
     .freeform_outputs_size = freeform_outputs_1014843_1_size,
