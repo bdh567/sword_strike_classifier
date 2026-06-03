@@ -167,9 +167,33 @@ void loop()
     // print the predictions
     ei_printf("Predictions (DSP: %d ms., Classification: %d ms., Anomaly: %d ms.):\r\n",
         result.timing.dsp, result.timing.classification, result.timing.anomaly);
+    
+    // --- New variables to track the winning prediction ---
+    int highest_idx = 0;
+    float highest_conf = 0.0f;
+
     for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
         ei_printf("%s: %.5f\r\n", result.classification[ix].label, result.classification[ix].value);
+        
+        // Check if the current class has the highest likelihood so far
+        if (result.classification[ix].value > highest_conf) {
+            highest_conf = result.classification[ix].value;
+            highest_idx = ix;
+        }
     }
+
+    // --- Print the final winning prediction ---
+    String upperLabel = String(result.classification[highest_idx].label);
+    upperLabel.toUpperCase(); // Formats it cleanly for the monitor (e.g., "VERTICAL")
+
+    Serial.println("----------------------------------------");
+    Serial.print(">>> WINNING TARGET: ");
+    Serial.print(upperLabel);
+    Serial.print(" (");
+    Serial.print(highest_conf * 100.0f, 1);
+    Serial.println("%)");
+    Serial.println("----------------------------------------");
+    
 #if EI_CLASSIFIER_HAS_ANOMALY == 1
     ei_printf("    anomaly score: %.3f\r\n", result.anomaly);
 #endif
