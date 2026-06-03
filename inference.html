@@ -2,52 +2,143 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Simple BLE Display</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartSword Telemetry Dashboard</title>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #121212; color: #fff; padding-top: 20vh; }
-        button { padding: 15px 30px; font-size: 18px; cursor: pointer; background: #00adb5; color: white; border: none; border-radius: 5px; }
-        #prediction { font-size: 4rem; color: #00adb5; font-weight: bold; margin-top: 40px; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #121214;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            text-align: center;
+            background-color: #1a1a1e;
+            padding: 2.5rem;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            border: 1px solid #2a2a30;
+            width: 320px;
+        }
+        button {
+            background-color: #007aff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        button:hover {
+            background-color: #0062cc;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        .status {
+            font-size: 0.85rem;
+            color: #8e8e93;
+            margin-top: 10px;
+            margin-bottom: 25px;
+        }
+        .prediction-box {
+            font-size: 2rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #30d158; /* Green text color */
+            padding: 20px;
+            background-color: #24242a;
+            border-radius: 12px;
+            border: 1px solid #3a3a42;
+            min-height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
     </style>
 </head>
 <body>
 
-    <button id="connect-btn">Connect Bluetooth</button>
-    <p id="prediction">OFFLINE</p>
+<div class="container">
+    <h2>Sword Tracker</h2>
+    <button id="connectBtn">Connect Sword</button>
+    <div id="statusText" class="status">Disconnected</div>
+    
+    <div id="predictionDisplay" class="prediction-box">---</div>
+</div>
 
-    <script>
-        const SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
-        const PREDICTION_UUID = "19b10001-e8f2-537e-4f6c-d104768a1214";
+<script>
+    // These must exactly match the UUID strings declared in your Arduino sketch code
+    const SWORD_SERVICE_UUID   = "19b10000-e8f2-537e-4f6c-d104768a1214";
+    const PREDICTION_CHAR_UUID = "19b10001-e8f2-537e-4f6c-d104768a1214";
 
-        document.getElementById('connect-btn').addEventListener('click', async () => {
-            const display = document.getElementById('prediction');
-            try {
-                display.innerText = "CONNECTING...";
-                
-                const device = await navigator.bluetooth.requestDevice({
-                    filters: [{ services: [SERVICE_UUID] }],
-                    optionalServices: [SERVICE_UUID]
-                });
-                
-                console.log("Device selected. Connecting to GATT server...");
-                const server = await device.gatt.connect();
-                
-                console.log("Locating primary service layer...");
-                const service = await server.getPrimaryService(SERVICE_UUID);
-                
-                console.log("Binding data characteristic tracking channels...");
-                const characteristic = await service.getCharacteristic(PREDICTION_UUID);
-                
-                await characteristic.startNotifications();
-                characteristic.addEventListener('characteristicvaluechanged', (e) => {
-                    display.innerText = new TextDecoder().decode(e.target.value).trim().toUpperCase();
-                });
+    const connectBtn = document.getElementById('connectBtn');
+    const statusText = document.getElementById('statusText');
+    const predictionDisplay = document.getElementById('predictionDisplay');
 
-                display.innerText = "READY / IDLE";
-            } catch (err) {
-                display.innerText = "ERROR / TIMEOUT";
-                console.error(err);
-            }
-        });
-    </script>
+    connectBtn.addEventListener('click', async () => {
+        try {
+            statusText.innerText = "Requesting Bluetooth device...";
+            
+            // 1. Scan and filter out devices by your custom Service UUID identifier flag
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [{ services: [SWORD_SERVICE_UUID] }]
+            });
+
+            statusText.innerText = "Connecting to GATT server infrastructure...";
+            const server = await device.gatt.connect();
+
+            statusText.innerText = "Locating custom sword service tracking...";
+            const service = await server.getPrimaryService(SWORD_SERVICE_UUID);
+
+            statusText.innerText = "Retrieving notification characteristic...";
+            const characteristic = await service.getCharacteristic(PREDICTION_CHAR_UUID);
+
+            // 2. Start listening to active data notifications stream broadcasts
+            await characteristic.startNotifications();
+            statusText.innerText = "Link established. Streaming live telemetry.";
+            connectBtn.style.backgroundColor = "#30d158";
+            connectBtn.innerText = "Connected";
+
+            // 3. Handle incoming over-the-air payload string packets
+            characteristic.addEventListener('characteristicvaluechanged', (event) => {
+                const valueDecoder = new TextDecoder('utf-8');
+                const parsedPrediction = valueDecoder.decode(event.target.value);
+                
+                // Update the user interface element
+                predictionDisplay.innerText = parsedPrediction;
+                
+                // Add a dynamic color shift visual flash effect depending on strike vector types
+                if (parsedPrediction === "idle") {
+                    predictionDisplay.style.color = "#8e8e93"; // Gray text color for idle
+                } else {
+                    predictionDisplay.style.color = "#ff453a"; // Vivid red color for active strike vector alerts
+                }
+            });
+
+            // Handle accidental disconnects gracefully
+            device.addEventListener('gattserverdisconnected', () => {
+                statusText.innerText = "Connection lost. Re-advertising...";
+                predictionDisplay.innerText = "---";
+                predictionDisplay.style.color = "#30d158";
+                connectBtn.style.backgroundColor = "#007aff";
+                connectBtn.innerText = "Connect Sword";
+            });
+
+        } catch (error) {
+            console.error("Web BLE API Pipeline Exception:", error);
+            statusText.innerText = "Connection failed/canceled.";
+        }
+    });
+</script>
+
 </body>
 </html>

@@ -20,6 +20,18 @@
 #include <Arduino_LPS22HB.h> //Click here to get the library: https://www.arduino.cc/reference/en/libraries/arduino_lps22hb/
 #include <Arduino_HS300x.h> //Click here to get the library: https://www.arduino.cc/reference/en/libraries/arduino_hs300x/
 #include <Arduino_APDS9960.h> //Click here to get the library: https://www.arduino.cc/reference/en/libraries/arduino_apds9960/
+#include <ArduinoBLE.h>
+
+// BLE Service & Characteristic setup (Fixed 32-byte primitive array)
+#define SWORD_SERVICE_UUID        "19b10000-e8f2-537e-4f6c-d104768a1214"
+#define PREDICTION_CHAR_UUID      "19b10001-e8f2-537e-4f6c-d104768a1214"
+
+BLEService        swordService(SWORD_SERVICE_UUID);
+BLECharacteristic predictionChar(PREDICTION_CHAR_UUID, BLERead | BLENotify, 32);
+
+// Variable to track state changes
+const char* lastTransmittedLabel = "";
+// end BLE setup code
 
 enum sensor_status {
     NOT_USED = -1,
@@ -84,6 +96,23 @@ void setup()
     while (!Serial);
     Serial.println("Edge Impulse Sensor Fusion Inference\r\n");
 
+    // Initialize Bluetooth Radio
+    if (!BLE.begin()) {
+        Serial.println("CRITICAL FAILURE: BLE radio initialization failed!");
+        while (1);
+    }
+    
+    BLE.setLocalName("SmartSword-Inference");
+    BLE.setAdvertisedServiceUuid(SWORD_SERVICE_UUID);
+    BLE.setAdvertisedService(swordService);
+    swordService.addCharacteristic(predictionChar);
+    BLE.addService(swordService);
+    
+    predictionChar.writeValue("idle");
+    BLE.advertise();
+    Serial.println("Bluetooth Radio Online & Advertising.");
+    // end bluetooth init
+
     /* Connect used sensors */
     if(ei_connect_fusion_list(EI_CLASSIFIER_FUSION_AXES_STRING) == false) {
         ei_printf("ERR: Errors in sensor list detected\r\n");
@@ -110,89 +139,132 @@ void setup()
 */
 void loop()
 {
-    ei_printf("\nStarting inferencing in 2 seconds...\r\n");
-
-    delay(2000);
-
-    if (EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME != fusion_ix) {
-        ei_printf("ERR: Sensors don't match the sensors required in the model\r\n"
-        "Following sensors are required: %s\r\n", EI_CLASSIFIER_FUSION_AXES_STRING);
-        return;
-    }
-
-    ei_printf("Sampling...\r\n");
-
-    // Allocate a buffer here for the values we'll read from the sensor
-    float buffer[EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE] = { 0 };
-
-    for (size_t ix = 0; ix < EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE; ix += EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME) {
-        // Determine the next tick (and then sleep later)
-        int64_t next_tick = (int64_t)micros() + ((int64_t)EI_CLASSIFIER_INTERVAL_MS * 1000);
-
-        for(int i = 0; i < fusion_ix; i++) {
-            if (sensors[fusion_sensors[i]].status == INIT) {
-                sensors[fusion_sensors[i]].poll_sensor();
-                sensors[fusion_sensors[i]].status = SAMPLED;
-            }
-            if (sensors[fusion_sensors[i]].status == SAMPLED) {
-                buffer[ix + i] = *sensors[fusion_sensors[i]].value;
-                sensors[fusion_sensors[i]].status = INIT;
-            }
-        }
-
-        int64_t wait_time = next_tick - (int64_t)micros();
-
-        if(wait_time > 0) {
-            delayMicroseconds(wait_time);
-        }
-    }
-
-    // Turn the raw buffer in a signal which we can the classify
-    signal_t signal;
-    int err = numpy::signal_from_buffer(buffer, EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE, &signal);
-    if (err != 0) {
-        ei_printf("ERR:(%d)\r\n", err);
-        return;
-    }
-
-    // Run the classifier
-    ei_impulse_result_t result = { 0 };
-
-    err = run_classifier(&signal, &result, debug_nn);
-    if (err != EI_IMPULSE_OK) {
-        ei_printf("ERR:(%d)\r\n", err);
-        return;
-    }
-
-    // print the predictions
-    ei_printf("Predictions (DSP: %d ms., Classification: %d ms., Anomaly: %d ms.):\r\n",
-        result.timing.dsp, result.timing.classification, result.timing.anomaly);
+    // Listen for incoming central connections
+    BLEDevice central = BLE.central();
     
-    // track winning prediction
-    int highest_idx = 0;
-    float highest_conf = 0.0f;
+    if (central && central.connected()) {
+        Serial.print("\n>>> Connection Established with Central: ");
+        Serial.println(central.address());
 
-    for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
-        ei_printf("%s: %.5f\r\n", result.classification[ix].label, result.classification[ix].value);
+        // --- CRITICAL DISCOVERY CUSHION ---
+        // Gives the browser 2 seconds to cleanly discover the GATT attributes
+        // and map the Service/Characteristic UUIDs before the IMU starts hogging the bus.
+        for (int i = 0; i < 100; i++) {
+            BLE.poll();
+            delay(20); 
+        }
         
-        // Check if the current class has the highest likelihood so far
-        if (result.classification[ix].value > highest_conf) {
-            highest_conf = result.classification[ix].value;
-            highest_idx = ix;
+        IMU.begin(); // Safely clear any I2C bus lockup
+        
+        // Paced discovery handshake cushion window
+        delay(100);
+        IMU.begin(); // Guard against I2C lockup post-handshake
+
+        // Run continuous inference ONLY while the client stays connected
+        while (central.connected()) {
+            ei_printf("\nStarting inferencing in 2 seconds...\r\n");
+
+            delay(2000);
+
+            if (EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME != fusion_ix) {
+                ei_printf("ERR: Sensors don't match the sensors required in the model\r\n"
+                "Following sensors are required: %s\r\n", EI_CLASSIFIER_FUSION_AXES_STRING);
+                return;
+            }
+
+            ei_printf("Sampling...\r\n");
+
+            // Allocate a buffer here for the values we'll read from the sensor
+            float buffer[EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE] = { 0 };
+
+            for (size_t ix = 0; ix < EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE; ix += EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME) {
+                // Determine the next tick (and then sleep later)
+                int64_t next_tick = (int64_t)micros() + ((int64_t)EI_CLASSIFIER_INTERVAL_MS * 1000);
+
+                for(int i = 0; i < fusion_ix; i++) {
+                    if (sensors[fusion_sensors[i]].status == INIT) {
+                        sensors[fusion_sensors[i]].poll_sensor();
+                        sensors[fusion_sensors[i]].status = SAMPLED;
+                    }
+                    if (sensors[fusion_sensors[i]].status == SAMPLED) {
+                        buffer[ix + i] = *sensors[fusion_sensors[i]].value;
+                        sensors[fusion_sensors[i]].status = INIT;
+                    }
+                }
+
+                int64_t wait_time = next_tick - (int64_t)micros();
+
+                if(wait_time > 0) {
+                    delayMicroseconds(wait_time);
+                }
+            }
+
+            // Turn the raw buffer in a signal which we can the classify
+            signal_t signal;
+            int err = numpy::signal_from_buffer(buffer, EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE, &signal);
+            if (err != 0) {
+                ei_printf("ERR:(%d)\r\n", err);
+                return;
+            }
+
+            // Run the classifier
+            ei_impulse_result_t result = { 0 };
+
+            err = run_classifier(&signal, &result, debug_nn);
+            if (err != EI_IMPULSE_OK) {
+                ei_printf("ERR:(%d)\r\n", err);
+                return;
+            }
+
+            // print the predictions
+            ei_printf("Predictions (DSP: %d ms., Classification: %d ms., Anomaly: %d ms.):\r\n",
+                result.timing.dsp, result.timing.classification, result.timing.anomaly);
+            
+            // track winning prediction
+            int highest_idx = 0;
+            float highest_conf = 0.0f;
+
+            for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
+                ei_printf("%s: %.5f\r\n", result.classification[ix].label, result.classification[ix].value);
+                
+                // Check if the current class has the highest likelihood so far
+                if (result.classification[ix].value > highest_conf) {
+                    highest_conf = result.classification[ix].value;
+                    highest_idx = ix;
+                }
+
+            }
+
+            // BLE transmit
+            const char* currentLabel = result.classification[highest_idx].label;
+                        
+            // Keep background BLE pairing events alive
+            BLE.poll(); 
+
+            // Send if confidence is > 60% and the state has actually changed
+            if (highest_conf > 0.60 && strcmp(currentLabel, lastTransmittedLabel) != 0) {
+                lastTransmittedLabel = currentLabel;
+                
+                // Directly write the text pointer to the radio hardware stack
+                predictionChar.writeValue((const uint8_t*)currentLabel, strlen(currentLabel));
+                
+                Serial.println(">>> [BLE TRANSMIT SUCCESS]");
+            }
+            // end BLE transmit
+
+            // print prediction
+            String upperLabel = String(result.classification[highest_idx].label);
+            upperLabel.toUpperCase();
+
+            Serial.println("----------------------------------------");
+            Serial.print(">>> WINNING TARGET: ");
+            Serial.print(upperLabel);
+            Serial.print(" (");
+            Serial.print(highest_conf * 100.0f, 1);
+            Serial.println("%)");
+            Serial.println("----------------------------------------");
         }
     }
-
-    // print prediction
-    String upperLabel = String(result.classification[highest_idx].label);
-    upperLabel.toUpperCase();
-
-    Serial.println("----------------------------------------");
-    Serial.print(">>> WINNING TARGET: ");
-    Serial.print(upperLabel);
-    Serial.print(" (");
-    Serial.print(highest_conf * 100.0f, 1);
-    Serial.println("%)");
-    Serial.println("----------------------------------------");
 
 #if EI_CLASSIFIER_HAS_ANOMALY == 1
     ei_printf("    anomaly score: %.3f\r\n", result.anomaly);
