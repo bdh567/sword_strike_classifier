@@ -173,6 +173,7 @@ void loop()
             }
 
             ei_printf("Sampling...\r\n");
+            predictionChar.writeValue("Sampling...");
 
             // Allocate a buffer here for the values we'll read from the sensor
             float buffer[EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE] = { 0 };
@@ -239,17 +240,13 @@ void loop()
             const char* currentLabel = result.classification[highest_idx].label;
                         
             // Keep background BLE pairing events alive
-            BLE.poll(); 
+            //BLE.poll(); 
 
-            // Send if confidence is > 60% and the state has actually changed
-            if (highest_conf > 0.60 && strcmp(currentLabel, lastTransmittedLabel) != 0) {
-                lastTransmittedLabel = currentLabel;
-                
-                // Directly write the text pointer to the radio hardware stack
-                predictionChar.writeValue((const uint8_t*)currentLabel, strlen(currentLabel));
-                
-                Serial.println(">>> [BLE TRANSMIT SUCCESS]");
-            }
+            
+            predictionChar.writeValue((const uint8_t*)currentLabel, strlen(currentLabel));
+            
+            Serial.println(">>> [BLE TRANSMIT SUCCESS]");
+            
             // end BLE transmit
 
             // print prediction
