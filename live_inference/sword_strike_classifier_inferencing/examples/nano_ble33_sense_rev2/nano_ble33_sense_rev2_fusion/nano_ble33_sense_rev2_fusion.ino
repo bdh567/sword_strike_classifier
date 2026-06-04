@@ -74,12 +74,27 @@ static int fusion_ix = 0;
 /** Used sensors value function connected to label name */
 eiSensors sensors[] =
 {
-    {"accelX", &data[0], &poll_acc, &init_IMU, NOT_USED},
-    {"accelY", &data[1], &poll_acc, &init_IMU, NOT_USED},
-    {"accelZ", &data[2], &poll_acc, &init_IMU, NOT_USED},
-    {"gyroX",  &data[3], &poll_gyr, &init_IMU, NOT_USED},
-    {"gyroY",  &data[4], &poll_gyr, &init_IMU, NOT_USED},
-    {"gyroZ",  &data[5], &poll_gyr, &init_IMU, NOT_USED}
+    "accX", &data[0], &poll_acc, &init_IMU, NOT_USED,
+    "accY", &data[1], &poll_acc, &init_IMU, NOT_USED,
+    "accZ", &data[2], &poll_acc, &init_IMU, NOT_USED,
+    "gyrX", &data[3], &poll_gyr, &init_IMU, NOT_USED,
+    "gyrY", &data[4], &poll_gyr, &init_IMU, NOT_USED,
+    "gyrZ", &data[5], &poll_gyr, &init_IMU, NOT_USED,
+    "magX", &data[6], &poll_mag, &init_IMU, NOT_USED,
+    "magY", &data[7], &poll_mag, &init_IMU, NOT_USED,
+    "magZ", &data[8], &poll_mag, &init_IMU, NOT_USED,
+
+    "temperature", &data[9], &poll_HTS, &init_HTS, NOT_USED,
+    "humidity", &data[10], &poll_HTS, &init_HTS, NOT_USED,
+
+    "pressure", &data[11], &poll_BARO, &init_BARO, NOT_USED,
+
+    "red", &data[12], &poll_APDS_color, &init_APDS, NOT_USED,
+    "green", &data[13], &poll_APDS_color, &init_APDS, NOT_USED,
+    "blue", &data[14], &poll_APDS_color, &init_APDS, NOT_USED,
+    "brightness", &data[15], &poll_APDS_color, &init_APDS, NOT_USED,
+    "proximity", &data[16], &poll_APDS_proximity, &init_APDS, NOT_USED,
+    "gesture", &data[17], &poll_APDS_gesture,&init_APDS, NOT_USED,
 };
 
 /**

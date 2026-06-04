@@ -87,7 +87,7 @@
 #define EI_CLASSIFIER_PROJECT_ID                 1014843
 #define EI_CLASSIFIER_PROJECT_OWNER              "benhorton"
 #define EI_CLASSIFIER_PROJECT_NAME               "sword strike classifier"
-#define EI_CLASSIFIER_PROJECT_DEPLOY_VERSION     6
+#define EI_CLASSIFIER_PROJECT_DEPLOY_VERSION     7
 #define EI_CLASSIFIER_NN_INPUT_FRAME_SIZE        126
 #define EI_CLASSIFIER_RAW_SAMPLE_COUNT           40
 #define EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME      6
@@ -97,8 +97,8 @@
 #define EI_CLASSIFIER_RESIZE_MODE                EI_CLASSIFIER_RESIZE_NONE
 #define EI_CLASSIFIER_INPUT_FRAMES               0
 #define EI_CLASSIFIER_INTERVAL_MS                25
-#define EI_CLASSIFIER_NN_OUTPUT_COUNT            4
-#define EI_CLASSIFIER_LABEL_COUNT                4
+#define EI_CLASSIFIER_NN_OUTPUT_COUNT            3
+#define EI_CLASSIFIER_LABEL_COUNT                3
 #define EI_CLASSIFIER_SINGLE_FEATURE_INPUT       1
 #define EI_CLASSIFIER_FREQUENCY                  40
 #define EI_CLASSIFIER_SENSOR                     EI_CLASSIFIER_SENSOR_FUSION

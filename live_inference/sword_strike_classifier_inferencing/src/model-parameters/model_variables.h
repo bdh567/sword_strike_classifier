@@ -46,7 +46,7 @@
 #include "edge-impulse-sdk/classifier/inferencing_engines/engines.h"
 #include "edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_common.h"
 
-const char* ei_classifier_inferencing_categories_1014843_1[] = { "diagonal", "horizontal", "idle", "vertical" };
+const char* ei_classifier_inferencing_categories_1014843_1[] = { "horizontal", "idle", "vertical" };
 
 EI_CLASSIFIER_DSP_AXES_INDEX_TYPE ei_dsp_config_1014843_8_axes[] = { 0, 1, 2, 3, 4, 5 };
 const uint32_t ei_dsp_config_1014843_8_axes_size = 6;
@@ -150,7 +150,7 @@ const ei_impulse_t impulse_1014843_1 = {
     .project_name = "sword strike classifier",
     .impulse_id = 1,
     .impulse_name = "Impulse #1",
-    .deploy_version = 6,
+    .deploy_version = 7,
 
     .nn_input_frame_size = 126,
     .raw_sample_count = 40,
@@ -181,7 +181,7 @@ const ei_impulse_t impulse_1014843_1 = {
     .slices_per_model_window = 4,
 
     .has_anomaly = EI_ANOMALY_TYPE_UNKNOWN,
-    .label_count = 4,
+    .label_count = 3,
     .categories = ei_classifier_inferencing_categories_1014843_1,
     .results_type = EI_CLASSIFIER_TYPE_CLASSIFICATION,
     .freeform_outputs_size = freeform_outputs_1014843_1_size,

@@ -92,7 +92,7 @@ void setup()
     /* Init serial */
     Serial.begin(115200);
     // comment out the below line to cancel the wait for USB connection (needed for native USB)
-    while (!Serial);
+    //while (!Serial);
     Serial.println("Edge Impulse Sensor Fusion Inference\r\n");
 
     // Initialize Bluetooth
