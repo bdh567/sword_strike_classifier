@@ -22,14 +22,13 @@
 #include <Arduino_APDS9960.h> //Click here to get the library: https://www.arduino.cc/reference/en/libraries/arduino_apds9960/
 #include <ArduinoBLE.h>
 
-// BLE Service & Characteristic setup (Fixed 32-byte primitive array)
+// BLE setup
 #define SWORD_SERVICE_UUID        "19b10000-e8f2-537e-4f6c-d104768a1214"
 #define PREDICTION_CHAR_UUID      "19b10001-e8f2-537e-4f6c-d104768a1214"
 
 BLEService        swordService(SWORD_SERVICE_UUID);
 BLECharacteristic predictionChar(PREDICTION_CHAR_UUID, BLERead | BLENotify, 32);
 
-// Variable to track state changes
 const char* lastTransmittedLabel = "";
 // end BLE setup code
 
@@ -96,7 +95,7 @@ void setup()
     while (!Serial);
     Serial.println("Edge Impulse Sensor Fusion Inference\r\n");
 
-    // Initialize Bluetooth Radio
+    // Initialize Bluetooth
     if (!BLE.begin()) {
         Serial.println("CRITICAL FAILURE: BLE radio initialization failed!");
         while (1);
@@ -110,7 +109,7 @@ void setup()
     
     predictionChar.writeValue("idle");
     BLE.advertise();
-    Serial.println("Bluetooth Radio Online & Advertising.");
+    Serial.println("Bluetooth Radio Online");
     // end bluetooth init
 
     /* Connect used sensors */
@@ -146,21 +145,14 @@ void loop()
         Serial.print("\n>>> Connection Established with Central: ");
         Serial.println(central.address());
 
-        // --- CRITICAL DISCOVERY CUSHION ---
-        // Gives the browser 2 seconds to cleanly discover the GATT attributes
-        // and map the Service/Characteristic UUIDs before the IMU starts hogging the bus.
+        // Gives the browser time to cleanly setup BLE stuff
         for (int i = 0; i < 100; i++) {
             BLE.poll();
             delay(20); 
         }
         
-        IMU.begin(); // Safely clear any I2C bus lockup
-        
-        // Paced discovery handshake cushion window
-        delay(100);
-        IMU.begin(); // Guard against I2C lockup post-handshake
+        IMU.begin(); 
 
-        // Run continuous inference ONLY while the client stays connected
         while (central.connected()) {
             ei_printf("\nStarting inferencing in 2 seconds...\r\n");
 
@@ -238,28 +230,17 @@ void loop()
 
             // BLE transmit
             const char* currentLabel = result.classification[highest_idx].label;
-                        
-            // Keep background BLE pairing events alive
-            //BLE.poll(); 
-
-            
             predictionChar.writeValue((const uint8_t*)currentLabel, strlen(currentLabel));
-            
-            Serial.println(">>> [BLE TRANSMIT SUCCESS]");
-            
-            // end BLE transmit
 
             // print prediction
             String upperLabel = String(result.classification[highest_idx].label);
             upperLabel.toUpperCase();
 
-            Serial.println("----------------------------------------");
-            Serial.print(">>> WINNING TARGET: ");
+            Serial.print("WINNING TARGET: ");
             Serial.print(upperLabel);
             Serial.print(" (");
             Serial.print(highest_conf * 100.0f, 1);
             Serial.println("%)");
-            Serial.println("----------------------------------------");
         }
     }
 
