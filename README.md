@@ -15,13 +15,17 @@ This project implements an end-to-end TinyML pipeline for classifying distinct s
 ## Repository Structure
 sword_strike_classifier/
 
-├── data_collect/          # Arduino sketch for IMU data logging over BLE Serial
+├── data_collect/
+│   └── Firmware for wireless IMU data acquisition over Bluetooth Low Energy (BLE)
 
-├── live_inference/        # Arduino sketch for on-device inference + BLE output
+├── live_inference/
+│   └── Embedded inference pipeline for real-time sword strike recognition
 
-├── logger.html            # Browser-based data collection interface (paired with data_collect.ino)
+├── logger.html
+│   └── Web application for dataset collection, visualization, and labeling
 
-├── inference.html         # Browser-based live inference dashboard (paired with sword_inference.ino)
+├── inference.html
+│   └── Web dashboard for monitoring live model predictions and sensor streams
 
 └── README.md
 
